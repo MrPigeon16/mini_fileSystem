@@ -301,6 +301,71 @@ int free_inode(const SuperBlock *sb, int inode_index)
     return 1; 
 }
 
+
+int alloc_block(SuperBlock* sb)
+{
+    int fd = open("/home/magshimim/disk.img", O_RDWR);
+    if (fd == -1) return -1;
+
+    uint32_t bitmap[SFS_BLOCK_SIZE];
+
+    lseek(fd, sb->data_bitmap_block * SFS_BLOCK_SIZE, SEEK_SET);
+    read(fd, bitmap, SFS_BLOCK_SIZE);
+    
+    for(int i = 0; i < SFS_BLOCK_AMOUT; ++i)
+    {
+        uint8_t byte_index = i / 8;
+        uint8_t bit_index = i % 8;
+        uint8_t mask = 1 << bit_index;
+        if((bitmap[byte_index] & mask) == 0)
+        {
+            bitmap[byte_index] |= mask;
+            lseek(fd, sb->data_bitmap_block * SFS_BLOCK_SIZE, SEEK_SET);
+            write(fd, bitmap, SFS_BLOCK_SIZE);
+            close(fd);
+            return i;
+        }        
+    }
+    close(fd);
+    return -1;
+}
+
+
+int free_block(const SuperBlock *sb, unsigned int b_index)
+{
+    int fd = open("/home/magshimim/disk.img", O_RDWR);
+    if (fd == -1)
+        return -1;
+
+    uint8_t bitmap[SFS_BLOCK_SIZE];
+
+    // Read data bitmap block
+    lseek(fd, sb->data_bitmap_block * SFS_BLOCK_SIZE, SEEK_SET);
+    if (read(fd, bitmap, SFS_BLOCK_SIZE) != SFS_BLOCK_SIZE) {
+        close(fd);
+        return -1;
+    }
+
+    int byte_index = b_index / 8;
+    int bit_index  = b_index % 8;
+
+    uint8_t mask = 1 << bit_index;
+
+    if ((bitmap[byte_index] & mask) == 0) {
+        close(fd);
+        return 0;
+    }
+
+    bitmap[byte_index] &= ~mask;
+
+    lseek(fd, sb->data_bitmap_block * SFS_BLOCK_SIZE, SEEK_SET);
+    write(fd, bitmap, SFS_BLOCK_SIZE);
+
+    close(fd);
+    return 1;
+}
+
+
 void mkfs(SuperBlock* sb)
 {
     printf("writeSuperBlock: %d\n", writeSuperBlock(sb));
@@ -308,12 +373,6 @@ void mkfs(SuperBlock* sb)
     printf("init_inode_table: %d\n", init_inode_table(sb));
     printf("write_root_directory: %d\n", write_root_directory_block(sb));
 }
-
-
-
-
-
-
 
 
 int main(void)
