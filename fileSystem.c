@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <strings.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <string.h>
@@ -210,18 +211,117 @@ static int write_root_directory_block(const SuperBlock *sb)
     return 1;
 }
 
-void mkfs(void)
-{
-    SuperBlock sb = init_superBlock();
 
-    printf("writeSuperBlock: %d\n", writeSuperBlock(&sb));
-    printf("init_bitmaps: %d\n", init_bitmaps(&sb));
-    printf("init_inode_table: %d\n", init_inode_table(&sb));
-    printf("write_root_directory: %d\n", write_root_directory_block(&sb));
+/*
+ * 
+ * Find the first free inode (0)
+ * And return the index
+ *
+ * */
+
+int alloc_inode(const SuperBlock *sb)
+{
+    int fd = open("/home/magshimim/disk.img", O_RDWR);
+    if (fd == -1)
+        return -1;
+
+    uint8_t bitmap[SFS_BLOCK_SIZE];
+
+    // Read inode bitmap block
+    lseek(fd, sb->inode_bitmap_block * SFS_BLOCK_SIZE, SEEK_SET);
+    if (read(fd, bitmap, SFS_BLOCK_SIZE) != SFS_BLOCK_SIZE) {
+        close(fd);
+        return -1;
+    }
+
+    // Scan for a free inode
+    for (int i = 0; i < sb->inode_count; i++) {
+
+        int byte_index = i / 8;
+        int bit_index  = i % 8;
+
+        uint8_t mask = 1 << bit_index;
+
+        // If bit is 0 - inode is free
+        if ((bitmap[byte_index] & mask) == 0) {
+
+            // inode as allocated
+            bitmap[byte_index] |= mask;
+
+            // Write bitmap back to disk
+            lseek(fd, sb->inode_bitmap_block * SFS_BLOCK_SIZE, SEEK_SET);
+            write(fd, bitmap, SFS_BLOCK_SIZE);
+
+            close(fd);
+            return i;   
+        }
+    }
+
+    close(fd);
+    return -1;
 }
+
+
+
+int free_inode(const SuperBlock *sb, int inode_index)
+{
+    int fd = open("/home/magshimim/disk.img", O_RDWR);
+    if (fd == -1)
+        return -1;
+
+    uint8_t bitmap[SFS_BLOCK_SIZE];
+
+    // Read inode bitmap block
+    lseek(fd, sb->inode_bitmap_block * SFS_BLOCK_SIZE, SEEK_SET);
+    if (read(fd, bitmap, SFS_BLOCK_SIZE) != SFS_BLOCK_SIZE) {
+        close(fd);
+        return -1;
+    }
+
+    // bit position
+    int byte_index = inode_index / 8;
+    int bit_index  = inode_index % 8;
+
+    uint8_t mask = 1 << bit_index;
+
+    // already free
+    if ((bitmap[byte_index] & mask) == 0) {
+        close(fd);
+        return 0;  
+    }
+
+    // free the inode
+    bitmap[byte_index] &= ~mask;
+
+    // Write bitmap back to disk
+    lseek(fd, sb->inode_bitmap_block * SFS_BLOCK_SIZE, SEEK_SET);
+    write(fd, bitmap, SFS_BLOCK_SIZE);
+
+    close(fd);
+    return 1; 
+}
+
+void mkfs(SuperBlock* sb)
+{
+    printf("writeSuperBlock: %d\n", writeSuperBlock(sb));
+    printf("init_bitmaps: %d\n", init_bitmaps(sb));
+    printf("init_inode_table: %d\n", init_inode_table(sb));
+    printf("write_root_directory: %d\n", write_root_directory_block(sb));
+}
+
+
+
+
+
+
+
 
 int main(void)
 {
-    mkfs();
+    
+    SuperBlock sb = init_superBlock();
+    
+    mkfs(&sb);
+    alloc_inode(&sb);
     return 0;
 }
