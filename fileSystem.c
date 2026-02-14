@@ -24,10 +24,14 @@
 #define SFS_INODE_COUNT  1024
 
 typedef struct inode {
-    uint8_t  type;                    /* 1=file, 2=dir */
-    uint32_t size;                    /* bytes in file/dir */
-    uint32_t blocks[SFS_DIRECT_PTRS]; /* direct block pointers */
-    uint16_t mode;                    /* optional */
+    unsigned int type;                    /* 1=file, 2=dir */
+    unsigned int size;                    /* bytes in file/dir */
+    unsigned int block_p;
+
+    // currnet file will not need more then 1 block
+    //unsigned int blocks[SFS_DIRECT_PTRS]; /* direct block pointers - a file may need more then one block */
+    
+    //uint16_t mode;                    /* optional */
 } inode_t;
 
 typedef struct {
@@ -100,7 +104,8 @@ static int writeSuperBlock(const SuperBlock *sb)
  * inode bitmap: inode 0 allocated
  * data bitmap:  first data block allocated
  */
-static int init_bitmaps(const SuperBlock *sb)
+
+int init_bitmaps(const SuperBlock *sb)
 {
     int fd = open("/home/magshimim/disk.img", O_WRONLY);
     if (fd == -1)
@@ -143,9 +148,9 @@ static int init_bitmaps(const SuperBlock *sb)
 /*
  *  init inode table:
  *  zero all inodes
- *  inode 0 = root directory
+ *  inode 1 = root directory
  */
-static int init_inode_table(const SuperBlock *sb)
+int init_inode_table(const SuperBlock *sb)
 {
     int fd = open("/home/magshimim/disk.img", O_WRONLY);
     if (fd == -1)
@@ -159,9 +164,9 @@ static int init_inode_table(const SuperBlock *sb)
     inode_t table[SFS_INODE_COUNT];
     memset(table, 0, sizeof(table));
 
-    table[0].type      = 2;                  /* directory */
-    table[0].size      = sizeof(dir) * 2;    /* . and .. */
-    table[0].blocks[0] = sb->data_block_start;
+    table[0].type = 2;                  /* directory */
+    table[0].size = sizeof(dir) * 2;    /* . and .. */
+    table[0].block_p = sb->data_block_start; // CHANGE IF DATA CAN TAKE MORE THEN ONE BLOCK!
 
     size_t bytes = sizeof(table);
 
@@ -180,7 +185,7 @@ static int init_inode_table(const SuperBlock *sb)
  *    [0] .  - inode 0
  *    [1] .. - inode 1
  */
-static int write_root_directory_block(const SuperBlock *sb)
+int write_root_directory_block(const SuperBlock *sb)
 {
     int fd = open("/home/magshimim/disk.img", O_WRONLY);
     if (fd == -1)
@@ -210,7 +215,6 @@ static int write_root_directory_block(const SuperBlock *sb)
     close(fd);
     return 1;
 }
-
 
 /*
  * 
@@ -301,7 +305,6 @@ int free_inode(const SuperBlock *sb, int inode_index)
     return 1; 
 }
 
-
 int alloc_block(SuperBlock* sb)
 {
     int fd = open("/home/magshimim/disk.img", O_RDWR);
@@ -365,6 +368,85 @@ int free_block(const SuperBlock *sb, unsigned int b_index)
     return 1;
 }
 
+int write_to_block(int fd, const char* data, unsigned int block_number)
+{
+    off_t offset = block_number * SFS_BLOCK_SIZE;
+    lseek(fd, offset, SEEK_SET);
+    write(fd, data, SFS_BLOCK_SIZE);
+    return 1; 
+}
+
+int read_block(int fd, unsigned int block_number, void *buffer)
+{
+    off_t offset = (off_t)block_number * SFS_BLOCK_SIZE;
+
+    if (lseek(fd, offset, SEEK_SET) == -1)
+        return -1;
+
+    if (read(fd, buffer, SFS_BLOCK_SIZE) != SFS_BLOCK_SIZE)
+        return -1;
+
+    return 0;
+}
+
+int write_inode(const SuperBlock *sb, unsigned int number, const inode_t *inode)
+{
+    if (number >= sb->inode_count)
+        return -1;
+
+    int fd = open("/home/magshimim/disk.img", O_RDWR);
+    if (fd == -1)
+        return -1;
+
+    off_t offset = (off_t)sb->inode_table_block * SFS_BLOCK_SIZE + (off_t)number * sizeof(inode_t);
+
+    if (lseek(fd, offset, SEEK_SET) == -1) {
+        close(fd);
+        return -1;
+    }
+
+    if (write(fd, inode, sizeof(inode_t)) != (ssize_t)sizeof(inode_t)) {
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+    return 0;
+}
+
+
+int read_inode(const SuperBlock *sb, unsigned int number, inode_t *inode)
+{
+    if (number >= sb->inode_count)
+        return -1;
+
+    int fd = open("/home/magshimim/disk.img", O_RDONLY);
+    if (fd == -1)
+        return -1;
+
+    off_t offset = (off_t)sb->inode_table_block * SFS_BLOCK_SIZE + (off_t)number * sizeof(inode_t);
+
+    if (lseek(fd, offset, SEEK_SET) == -1) {
+        close(fd);
+        return -1;
+    }
+
+    if (read(fd, inode, sizeof(inode_t)) != (ssize_t)sizeof(inode_t)) {
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+    return 0;
+}
+
+int create_file(const SuperBlock* sb ,const char* fileName)
+{
+    int inode_bitmap = alloc_inode(sb);
+    int data_bitmap = alloc_block(sb);
+
+}
+
 
 void mkfs(SuperBlock* sb)
 {
@@ -373,7 +455,6 @@ void mkfs(SuperBlock* sb)
     printf("init_inode_table: %d\n", init_inode_table(sb));
     printf("write_root_directory: %d\n", write_root_directory_block(sb));
 }
-
 
 int main(void)
 {
