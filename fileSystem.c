@@ -26,7 +26,7 @@
 typedef struct inode {
     unsigned int type;                    /* 1=file, 2=dir */
     unsigned int size;                    /* bytes in file/dir */
-    unsigned int block_p;
+    unsigned int block_p;                 /* change it to array to allow dirs hold more then 1 file */
 
     // currnet file will not need more then 1 block
     //unsigned int blocks[SFS_DIRECT_PTRS]; /* direct block pointers - a file may need more then one block */
@@ -216,6 +216,35 @@ int write_root_directory_block(const SuperBlock *sb)
     return 1;
 }
 
+
+int create_root_fooder(SuperBlock* sb)
+{
+    int fd = open("/home/magshimim/disk.img", O_RDWR);
+    if (fd == -1)
+        return 0;
+    
+    inode_t root_inode;
+    root_inode.type = 2;
+    root_inode.size
+
+
+}
+
+
+
+int add_inode_to_root(SuperBlock* sb, inode_t* inode, unsigned int inode_number)
+{
+
+    
+
+
+
+    return 0;
+}
+
+
+
+
 /*
  * 
  * Find the first free inode (0)
@@ -368,7 +397,7 @@ int free_block(const SuperBlock *sb, unsigned int b_index)
     return 1;
 }
 
-int write_to_block(int fd, const char* data, unsigned int block_number)
+int write_to_block(int fd, const char data[], unsigned int block_number)
 {
     off_t offset = block_number * SFS_BLOCK_SIZE;
     lseek(fd, offset, SEEK_SET);
@@ -440,10 +469,42 @@ int read_inode(const SuperBlock *sb, unsigned int number, inode_t *inode)
     return 0;
 }
 
-int create_file(const SuperBlock* sb ,const char* fileName)
+/*
+int write_to_file(const SuperBlock* sb ,const char* fileName, const char* content)
 {
-    int inode_bitmap = alloc_inode(sb);
-    int data_bitmap = alloc_block(sb);
+
+}
+*/
+
+int create_file(const SuperBlock* sb ,const char* fileName, const char* content)
+{
+    // Find free bit on inode_bitmap
+    int inode_number = alloc_inode(sb);
+    if (inode_number == -1) return -1;
+    
+    // Find free bit on dataBitmap
+    int dataBlock_number = alloc_block(sb);
+    if(dataBlock_number == -1) return -1;
+
+    unsigned char new_block[SFS_BLOCK_SIZE] = {0};
+    size_t file_len = strlen(content)+ 1;
+    memcpy(new_block, content, file_len);
+
+    int fd = open("/home/magshimim/disk.img", O_WRONLY);
+    
+    // Write to the block
+    write_to_block(fd, new_block, dataBlock_number);
+    close(fd);
+
+
+    inode_t new_inode;
+    new_inode.type = 1;
+    new_inode.size = file_len > SFS_BLOCK_SIZE ? SFS_BLOCK_SIZE : file_len; // Just the name
+    new_inode.block_p = dataBlock_number;
+    
+    write_inode(sb, inode_number, &new_inode);
+
+    
 
 }
 
