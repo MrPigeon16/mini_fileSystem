@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <strings.h>
 #include <sys/stat.h>
+#include <threads.h>
 #include <unistd.h>
 #include <string.h>
 
@@ -619,6 +620,53 @@ int create_home_folder(SuperBlock* sb)
 
 }
 
+int ls_command(SuperBlock* sb, unsigned int currnet_inode, char* buffer)
+{
+    // Open file to read only
+    int fd = open("/home/magshimim/disk.img",O_RDONLY);
+    if(fd == -1) return 0;
+
+    // read the inode
+    inode_t inode = {0};
+    read_inode(sb, currnet_inode, &inode);
+    
+    // Check if the inode is a direcotry
+    if(inode.type != DIRECOTRY)
+    {
+        close(fd);
+        return 0;
+    }
+
+    // Read the inode entires block
+    unsigned char temp_buffer[SFS_BLOCK_SIZE] = {0};
+    read_block(fd,inode.block_p, temp_buffer);
+    
+    // Close the file
+    close(fd);
+
+    dir* entires = (dir*)temp_buffer;
+    
+    //Claculate entires amount
+    size_t file_amount = inode.size / sizeof(dir);
+    size_t current_postion = 0;
+    for(size_t i = 0; i < file_amount; i++)
+    {
+        // if inode 0, mean doesn't exits
+        if(entires[i].inode != 0)
+        {
+             // copy the name into the buffer
+            int name_len = strlen(entires[i].name);
+
+            memcpy(buffer + current_postion, entires[i].name, name_len);
+            current_postion += name_len;
+            buffer[current_postion++] = ' ';       
+        }
+    }     
+    buffer[current_postion] = '\0';
+    return 1;
+
+}
+
 
 void mkfs(SuperBlock* sb)
 {
@@ -640,7 +688,10 @@ int main() {
     unsigned char buffer[4096];
     read_file(&sb, file, buffer);
 
+    unsigned char another_buffer[SFS_BLOCK_SIZE] = {0};
+    ls_command(&sb, home, another_buffer);
     printf("File content: %s\n", buffer);
+    printf("\n\n%s\n\n", another_buffer);
 
     return 0;
 }
