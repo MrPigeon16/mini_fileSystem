@@ -562,13 +562,42 @@ int create_file(SuperBlock* sb, const char* fileName, unsigned int parent_inode)
 }
 
 
+
+int write_to_file(SuperBlock* sb, const char* data, unsigned int inode_number)
+{
+    int fd = open("/home/magshimim/disk.img", O_RDWR);
+    if (fd == -1) return 0; 
+
+    inode_t temp_inode = {0};
+    read_inode(sb, inode_number, &temp_inode);
+
+    size_t old_size = temp_inode.size;
+    size_t new_size = strlen(data);
+
+    if(old_size + new_size > SFS_BLOCK_SIZE)
+    {
+        return -1;
+    }
+
+    unsigned char buffer[SFS_BLOCK_SIZE] = {0};
+    read_block(fd, temp_inode.block_p, buffer);
+    memcpy(buffer + old_size, data, new_size);
+
+    temp_inode.size += new_size;
+    write_inode(sb, inode_number, &temp_inode);
+    write_to_block(fd, buffer, temp_inode.block_p);
+
+    close(fd);
+    return 1;
+}
+
 void mkfs(SuperBlock* sb)
 {
     printf("writeSuperBlock: %d\n", writeSuperBlock(sb));
     printf("init_bitmaps: %d\n", init_bitmaps(sb));
     printf("init_inode_table: %d\n", init_inode_table(sb));
     printf("write_root_directory: %d\n", write_root_directory_block(sb));
-}
+                  }
 
 int main(void)
 {
