@@ -22,16 +22,22 @@
 #define SFS_VERSION      1u
 #define SFS_BLOCK_SIZE   4096u
 #define SFS_INODE_COUNT  1024
+#define DIRECOTRY  2
+#define FILE 1
+
 
 typedef struct inode {
     unsigned int type;                    /* 1=file, 2=dir */
     unsigned int size;                    /* bytes in file/dir */
-    unsigned int block_p;                 /* change it to array to allow dirs hold more then 1 file */
+    unsigned int block_p;                 
 
-    // currnet file will not need more then 1 block
+    /* currnet file will not need more then 1 block
+        that means right now, we can't store file larger then a block (4096 bytes)
+    */
+
     //unsigned int blocks[SFS_DIRECT_PTRS]; /* direct block pointers - a file may need more then one block */
     
-    //uint16_t mode;             L       /* optional */
+    //uint16_t mode;                        /* optional */
 } inode_t;
 
 typedef struct {
@@ -444,7 +450,10 @@ int read_inode(const SuperBlock *sb, unsigned int number, inode_t *inode)
     return 0;
 }
 
-int add_dir_entry(SuperBlock *sb, unsigned int parent_inode_number, unsigned int child_inode_number, const char *fileName){
+int add_dir_entry(SuperBlock *sb, unsigned int parent_inode_number, unsigned int child_inode_number, const char *fileName, unsigned int type){
+    
+    if (type != 2 && type != 1) return 0;
+
     int fd = open("/home/magshimim/disk.img", O_RDWR);
     if (fd == -1) return 0;
 
@@ -467,7 +476,7 @@ int add_dir_entry(SuperBlock *sb, unsigned int parent_inode_number, unsigned int
     dir *entries = (dir *)buffer;
 
     entries[entry_count].inode = child_inode_number;
-    entries[entry_count].type  = 2; // directory
+    entries[entry_count].type  = type; // directory
     strncpy(entries[entry_count].name, fileName, NAME_MAX);
 
     // Write updated directory block back to disk
@@ -480,6 +489,8 @@ int add_dir_entry(SuperBlock *sb, unsigned int parent_inode_number, unsigned int
     close(fd);
     return 1;
 }
+
+
 int write_entries(int fd, const SuperBlock *sb, unsigned int inode_number, unsigned int block_number,unsigned int parent_directory)
 {
     uint8_t block[SFS_BLOCK_SIZE] = {0};
@@ -489,7 +500,7 @@ int write_entries(int fd, const SuperBlock *sb, unsigned int inode_number, unsig
     entries[0].type = 2;
     strcpy(entries[0].name, ".");
 
-    entries[1].inode =  parent_directory;// Parent Inode
+    entries[1].inode =  parent_directory; // Parent Inode
     entries[1].type = 2;
     strcpy(entries[1].name, "..");
 
@@ -500,7 +511,6 @@ int write_entries(int fd, const SuperBlock *sb, unsigned int inode_number, unsig
     
     return 1;
 }
-
 
 
 int create_folder(SuperBlock *sb, unsigned int parent_inode_number, const char* directory_name)
@@ -520,7 +530,32 @@ int create_folder(SuperBlock *sb, unsigned int parent_inode_number, const char* 
 
     write_entries(fd, sb, inode_number, block_number, parent_inode_number);
 
-    add_dir_entry(sb, parent_inode_number, inode_number, directory_name);
+    add_dir_entry(sb, parent_inode_number, inode_number, directory_name, DIRECOTRY);
+
+    close(fd);
+    return inode_number;
+}
+
+
+int create_file(SuperBlock* sb, const char* fileName, unsigned int parent_inode)
+{
+    int fd = open("/home/magshimim/disk.img", O_RDWR);
+    
+    const int inode_number = alloc_inode(sb);
+    const int block_number = alloc_block(sb);
+    
+    unsigned char buffer[SFS_BLOCK_SIZE] = {0};
+    write_to_block(fd, buffer, block_number);
+
+
+    inode_t file_inode = {0};
+    file_inode.type = 1;
+    file_inode.size = 0; // empty file
+    file_inode.block_p = block_number;
+
+    write_inode(sb, inode_number, &file_inode);
+    add_dir_entry(sb, parent_inode, inode_number, fileName, DIRECOTRY);
+
 
     close(fd);
     return inode_number;
@@ -541,6 +576,5 @@ int main(void)
     SuperBlock sb = init_superBlock();
     
     mkfs(&sb);
-    alloc_inode(&sb);
     return 0;
 }
