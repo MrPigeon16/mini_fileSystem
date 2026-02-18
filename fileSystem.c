@@ -612,19 +612,35 @@ int read_file(SuperBlock* sb, unsigned int inode_number, unsigned char* buffer)
     return 1;
 }
 
+
+int create_home_folder(SuperBlock* sb)
+{
+    return create_folder(sb, 0, "home");
+
+}
+
+
 void mkfs(SuperBlock* sb)
 {
     printf("writeSuperBlock: %d\n", writeSuperBlock(sb));
     printf("init_bitmaps: %d\n", init_bitmaps(sb));
     printf("init_inode_table: %d\n", init_inode_table(sb));
     printf("write_root_directory: %d\n", write_root_directory_block(sb));
-                  }
+}
 
-int main(void)
-{
-    
+int main() {
     SuperBlock sb = init_superBlock();
-    
     mkfs(&sb);
+
+    int home = create_home_folder(&sb);
+    int file = create_file(&sb, "myFile.txt", home);
+
+    write_to_file(&sb, "Hello Ilay!", file);
+
+    unsigned char buffer[4096];
+    read_file(&sb, file, buffer);
+
+    printf("File content: %s\n", buffer);
+
     return 0;
 }
