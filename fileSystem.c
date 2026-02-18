@@ -591,6 +591,27 @@ int write_to_file(SuperBlock* sb, const char* data, unsigned int inode_number)
     return 1;
 }
 
+
+int read_file(SuperBlock* sb, unsigned int inode_number, unsigned char* buffer)
+{
+    int fd = open("/home/magshimim/disk.img", O_RDONLY);
+    if (fd == -1) return 0;
+
+    // read the inode
+    inode_t temp_inode = {0};
+    read_inode(sb, inode_number, &temp_inode);
+    
+    unsigned char temp_buffer[SFS_BLOCK_SIZE] = {0};
+    // Read the block into the buffer
+    read_block(fd, temp_inode.block_p, temp_buffer);
+
+    memcpy(buffer, temp_buffer, temp_inode.size);
+    buffer[temp_inode.size] = '\0';
+    
+    close(fd);
+    return 1;
+}
+
 void mkfs(SuperBlock* sb)
 {
     printf("writeSuperBlock: %d\n", writeSuperBlock(sb));
